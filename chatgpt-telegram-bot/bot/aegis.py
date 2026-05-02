@@ -1,9 +1,11 @@
 import os
 import threading
 import uvicorn
-from fastapi import FastAPI
+import uuid  # Добавляем для уникальных ID
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+# Сервер для сканера
 scan_app = FastAPI()
 _openai_helper = None
 
@@ -17,21 +19,31 @@ def set_openai_helper(helper):
     global _openai_helper
     _openai_helper = helper
 
-@scan_app.post("/webhook/aegis-scan")
-async def aegis_scan(request: AegisScanRequest):
-    if request.token != os.getenv("AEGIS_SECRET_TOKEN", "secret123"):
-        return {"reply": "Unauthorized"}
 
-    # Исправлено: забираем 2 значения вместо 3
-    response, total_tokens = await _openai_helper.get_chat_response(
-        chat_id=0,
+@scan_app.post("/webhook/aegis-scan")
+async def aegis_scan_endpoint(request: AegisScanRequest):
+    # 1. Проверка токена
+    if request.token != os.getenv("AEGIS_SECRET_TOKEN", "12345"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # 2. Создаем изолированный ID для этого конкретного теста
+    # Это предотвращает "загрязнение" истории чата (как в твоем Scenario A)
+    scan_session_id = f"test_{uuid.uuid4().hex[:8]}"
+
+    # 3. Прямой вызов "мозга" бота
+    # Используем корректную распаковку (2 значения)
+    answer, _ = await _openai_helper.get_chat_response(
+        chat_id=scan_session_id,
         query=request.message
     )
-    return {"reply": response}
+
+    return {"reply": answer}
 
 
 def start_aegis_server():
-    uvicorn.run(scan_app, host="0.0.0.0", port=8080, log_level="warning")
+    # Railway сам пробросит порт, если он указан как 8080 или взят из env
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(scan_app, host="0.0.0.0", port=port, log_level="warning")
 
 
 def run_in_background(openai_helper):
