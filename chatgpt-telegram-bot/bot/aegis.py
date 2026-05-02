@@ -17,13 +17,13 @@ def set_openai_helper(helper):
     global _openai_helper
     _openai_helper = helper
 
-
 @scan_app.post("/webhook/aegis-scan")
 async def aegis_scan(request: AegisScanRequest):
     if request.token != os.getenv("AEGIS_SECRET_TOKEN", "secret123"):
         return {"reply": "Unauthorized"}
 
-    response, _, _ = await _openai_helper.get_chat_response(
+    # Исправлено: забираем 2 значения вместо 3
+    response, total_tokens = await _openai_helper.get_chat_response(
         chat_id=0,
         query=request.message
     )
